@@ -393,8 +393,28 @@ def send_ipp_request(printer_uri, operation, attributes=None, extra_groups=None,
 API_HEADER = 'X-IPP-Debug'
 
 
+# Host header allowlist: blocks DNS-rebinding attacks, where a malicious
+# domain is re-pointed to this machine so the browser treats it as same-origin
+# (which would let it send the API header above). Extra names/IPs used to
+# reach the server can be added with IPP_GUI_ALLOWED_HOSTS (comma-separated).
+ALLOWED_HOSTS = {'localhost', '127.0.0.1', '::1'} | {
+    h.strip().lower()
+    for h in os.environ.get('IPP_GUI_ALLOWED_HOSTS', '').split(',') if h.strip()
+}
+
+
+def _request_hostname():
+    """Return the hostname part of the Host header, without port/brackets."""
+    host = (request.host or '').lower()
+    if host.startswith('['):                 # [::1]:5631
+        return host[1:host.find(']')] if ']' in host else host
+    return host.rsplit(':', 1)[0] if ':' in host else host
+
+
 @app.before_request
-def require_api_header():
+def check_request_origin():
+    if _request_hostname() not in ALLOWED_HOSTS:
+        return jsonify({'error': 'Host not allowed (see IPP_GUI_ALLOWED_HOSTS)'}), 403
     if request.path.startswith('/api/') and request.headers.get(API_HEADER) != '1':
         return jsonify({'error': f'Missing {API_HEADER} header'}), 403
 
@@ -2294,5 +2314,9 @@ if __name__ == '__main__':
     port = int(os.environ.get('IPP_GUI_PORT', '5631'))
     print("=" * 50)
     print(f"  IPP GUI - http://localhost:{port}")
+    print(f"  Allowed hosts: {', '.join(sorted(ALLOWED_HOSTS))}")
     print("=" * 50)
+    if host not in ('127.0.0.1', 'localhost', '::1') and not os.environ.get('IPP_GUI_ALLOWED_HOSTS'):
+        print("  Note: to reach the GUI from other machines, add the name/IP")
+        print("  they use to IPP_GUI_ALLOWED_HOSTS (e.g. IPP_GUI_ALLOWED_HOSTS=192.0.2.5)")
     app.run(host=host, port=port, debug=False)

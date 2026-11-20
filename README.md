@@ -91,13 +91,16 @@ Puis ouvrez **http://localhost:5631** dans votre navigateur.
 |--------------------------|-----------|---------------------------------|
 | `IPP_GUI_HOST`           | `127.0.0.1` | adresse d'écoute              |
 | `IPP_GUI_PORT`           | `5631`      | port HTTP de l'interface      |
+| `IPP_GUI_ALLOWED_HOSTS`  | *(vide)*    | noms/IP supplémentaires acceptés dans l'en-tête `Host`, séparés par des virgules (`localhost`, `127.0.0.1`, `::1` sont toujours acceptés) |
 
 Par défaut, l'interface n'est accessible que depuis la machine locale
 (sous WSL2, le navigateur Windows y accède quand même via `localhost`).
-Pour l'ouvrir aux autres postes du réseau, sur le port 8080 :
+Pour l'ouvrir aux autres postes du réseau, sur le port 8080, en déclarant
+l'adresse et/ou le nom par lesquels ils y accéderont :
 
 ```bash
-IPP_GUI_HOST=0.0.0.0 IPP_GUI_PORT=8080 ./run.sh
+IPP_GUI_HOST=0.0.0.0 IPP_GUI_PORT=8080 \
+IPP_GUI_ALLOWED_HOSTS=192.0.2.5,mon-poste.local ./run.sh
 ```
 
 ---
@@ -148,6 +151,8 @@ Cet outil est destiné au **débogage sur un réseau de confiance** :
 Protections en place :
 
 - écoute sur `127.0.0.1` uniquement par défaut ;
+- vérification de l'en-tête `Host` (liste blanche) contre les attaques par
+  *DNS rebinding* ;
 - en-tête `X-IPP-Debug` obligatoire sur `/api/*` : un site web tiers ouvert
   dans votre navigateur ne peut pas piloter l'API (CSRF) ;
 - seules les URI `ipp://` / `ipps://` sont acceptées, ce qui empêche d'utiliser
