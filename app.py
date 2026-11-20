@@ -534,7 +534,10 @@ def convert_to_pdf(data: bytes, filename: str) -> tuple:
 
     tmpdir = tempfile.mkdtemp(prefix='ipp-gui-convert-')
     try:
-        # Write the source file
+        # Write the source file under a fixed name: the uploaded filename is
+        # client-controlled and must never be used as a path component.
+        ext = os.path.splitext(os.path.basename(filename))[1].lower()
+        filename = 'input' + ext
         src_path = os.path.join(tmpdir, filename)
         with open(src_path, 'wb') as f:
             f.write(data)
@@ -2228,20 +2231,19 @@ function renderDiscoveryResults(data) {
     html += '<div style="font-size:12px; color:var(--text-muted); margin-bottom:10px;">' + data.count + ' printer(s) found</div>';
     data.printers.forEach((p, i) => {
       const stateColor = p.state === 'idle' ? 'var(--accent-success)' : p.state === 'processing' ? 'var(--accent-warning, #f5c211)' : 'var(--text-secondary)';
-      const stateDot = p.state ? '<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:' + stateColor + '; margin-right:6px;"></span>' + p.state : '';
-      html += '<div class="printer-disc-card" style="border:1px solid var(--border); border-radius:12px; padding:14px 16px; margin-bottom:8px; cursor:pointer; transition:all .15s;" ';
-      html += 'onclick="selectDiscoveredPrinter(\'' + p.uri.replace(/'/g, "\\'") + '\')" ';
+      const stateDot = p.state ? '<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:' + stateColor + '; margin-right:6px;"></span>' + escapeHtml(String(p.state)) : '';
+      html += '<div class="printer-disc-card" data-idx="' + i + '" style="border:1px solid var(--border); border-radius:12px; padding:14px 16px; margin-bottom:8px; cursor:pointer; transition:all .15s;" ';
       html += 'onmouseover="this.style.background=\'var(--bg-hover)\'; this.style.borderColor=\'var(--accent)\'" ';
       html += 'onmouseout="this.style.background=\'transparent\'; this.style.borderColor=\'var(--border)\'">';
       html += '<div style="display:flex; justify-content:space-between; align-items:start;">';
       html += '<div>';
-      html += '<div style="font-weight:600; font-size:14px; color:var(--text-primary);">🖨️ ' + (p.name || 'Unknown Printer') + '</div>';
-      if (p.product) html += '<div style="font-size:12px; color:var(--text-secondary); margin-top:2px;">' + p.product + '</div>';
-      html += '<div style="font-size:11px; color:var(--text-muted); margin-top:4px; font-family:monospace;">' + p.uri + '</div>';
+      html += '<div style="font-weight:600; font-size:14px; color:var(--text-primary);">🖨️ ' + escapeHtml(p.name || 'Unknown Printer') + '</div>';
+      if (p.product) html += '<div style="font-size:12px; color:var(--text-secondary); margin-top:2px;">' + escapeHtml(String(p.product)) + '</div>';
+      html += '<div style="font-size:11px; color:var(--text-muted); margin-top:4px; font-family:monospace;">' + escapeHtml(String(p.uri)) + '</div>';
       html += '</div>';
       html += '<div style="text-align:right; flex-shrink:0;">';
       if (stateDot) html += '<div style="font-size:12px; display:flex; align-items:center;">' + stateDot + '</div>';
-      html += '<div style="font-size:10px; color:var(--text-muted); margin-top:4px; background:var(--bg-tertiary); padding:2px 8px; border-radius:10px;">' + p.method + '</div>';
+      html += '<div style="font-size:10px; color:var(--text-muted); margin-top:4px; background:var(--bg-tertiary); padding:2px 8px; border-radius:10px;">' + escapeHtml(String(p.method)) + '</div>';
       html += '</div>';
       html += '</div>';
       html += '</div>';
@@ -2249,6 +2251,12 @@ function renderDiscoveryResults(data) {
   }
 
   results.innerHTML = html;
+  // Attach click handlers with a closure instead of building inline JS from
+  // network-supplied data (mDNS names/URIs are attacker-controllable).
+  results.querySelectorAll('.printer-disc-card').forEach(card => {
+    const p = data.printers[Number(card.dataset.idx)];
+    card.addEventListener('click', () => selectDiscoveredPrinter(p.uri));
+  });
 }
 
 function selectDiscoveredPrinter(uri) {
