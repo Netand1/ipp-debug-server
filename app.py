@@ -347,6 +347,8 @@ def send_ipp_request(printer_uri, operation, attributes=None, extra_groups=None,
                      document_data=None, version=(1, 1), timeout=30,
                      verify_ssl=True):
     """Send an IPP request and return parsed response."""
+    if not printer_uri.lower().startswith(('ipp://', 'ipps://')):
+        return {'error': 'Only ipp:// and ipps:// printer URIs are allowed'}
     http_url = ipp_uri_to_http(printer_uri)
 
     op_id = IPP_OPERATIONS.get(operation)
@@ -384,6 +386,18 @@ def send_ipp_request(printer_uri, operation, attributes=None, extra_groups=None,
 # ---------------------------------------------------------------------------
 # Flask Routes
 # ---------------------------------------------------------------------------
+
+# Every /api/* call must carry this header. Browsers cannot add a custom
+# header to a cross-origin request without a CORS preflight, which this
+# server never approves, so other websites cannot drive the API (CSRF).
+API_HEADER = 'X-IPP-Debug'
+
+
+@app.before_request
+def require_api_header():
+    if request.path.startswith('/api/') and request.headers.get(API_HEADER) != '1':
+        return jsonify({'error': f'Missing {API_HEADER} header'}), 403
+
 
 @app.route('/')
 def index():
@@ -1858,7 +1872,7 @@ async function executeOperation() {
   try {
     const resp = await fetch('/api/ipp', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-IPP-Debug': '1' },
       body: JSON.stringify({
         printer_uri: uri,
         operation: currentOp,
@@ -1933,7 +1947,7 @@ async function submitPrintJob() {
   saveRecentUri(uri);
 
   try {
-    const resp = await fetch('/api/print-job', { method: 'POST', body: formData });
+    const resp = await fetch('/api/print-job', { method: 'POST', headers: { 'X-IPP-Debug': '1' }, body: formData });
     const data = await resp.json();
     lastResponse = data;
     displayResponse(data);
@@ -2198,7 +2212,7 @@ async function startDiscovery() {
   try {
     const resp = await fetch('/api/discover', {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+      headers: {'Content-Type': 'application/json', 'X-IPP-Debug': '1'},
       body: JSON.stringify({methods, scan_timeout: timeout, query_printers: query})
     });
     const data = await resp.json();
@@ -2276,7 +2290,7 @@ function selectDiscoveredPrinter(uri) {
 # ---------------------------------------------------------------------------
 
 if __name__ == '__main__':
-    host = os.environ.get('IPP_GUI_HOST', '0.0.0.0')
+    host = os.environ.get('IPP_GUI_HOST', '127.0.0.1')
     port = int(os.environ.get('IPP_GUI_PORT', '5631'))
     print("=" * 50)
     print(f"  IPP GUI - http://localhost:{port}")

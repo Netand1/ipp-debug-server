@@ -48,7 +48,7 @@ protocole IPP binaire : aucune dépendance à CUPS ou à `ipptool` n'est requise
 ### Linux / macOS / WSL
 
 ```bash
-git clone https://github.com/<votre-compte>/ipp-debug-server.git
+git clone https://github.com/Netand1/ipp-debug-server.git
 cd ipp-debug-server
 
 python3 -m venv .venv
@@ -62,7 +62,7 @@ sudo apt install libreoffice-core libreoffice-writer libreoffice-calc libreoffic
 ### Windows (PowerShell)
 
 ```powershell
-git clone https://github.com/<votre-compte>/ipp-debug-server.git
+git clone https://github.com/Netand1/ipp-debug-server.git
 cd ipp-debug-server
 
 py -m venv .venv
@@ -89,13 +89,15 @@ Puis ouvrez **http://localhost:5631** dans votre navigateur.
 
 | Variable d'environnement | Défaut    | Description                     |
 |--------------------------|-----------|---------------------------------|
-| `IPP_GUI_HOST`           | `0.0.0.0` | adresse d'écoute                |
-| `IPP_GUI_PORT`           | `5631`    | port HTTP de l'interface        |
+| `IPP_GUI_HOST`           | `127.0.0.1` | adresse d'écoute              |
+| `IPP_GUI_PORT`           | `5631`      | port HTTP de l'interface      |
 
-Exemple — n'écouter qu'en local sur le port 8080 :
+Par défaut, l'interface n'est accessible que depuis la machine locale
+(sous WSL2, le navigateur Windows y accède quand même via `localhost`).
+Pour l'ouvrir aux autres postes du réseau, sur le port 8080 :
 
 ```bash
-IPP_GUI_HOST=127.0.0.1 IPP_GUI_PORT=8080 ./run.sh
+IPP_GUI_HOST=0.0.0.0 IPP_GUI_PORT=8080 ./run.sh
 ```
 
 ---
@@ -111,7 +113,9 @@ IPP_GUI_HOST=127.0.0.1 IPP_GUI_PORT=8080 ./run.sh
 
 ### API HTTP
 
-L'interface s'appuie sur une petite API JSON, utilisable aussi en script :
+L'interface s'appuie sur une petite API JSON, utilisable aussi en script.
+Chaque appel doit porter l'en-tête **`X-IPP-Debug: 1`** (protection CSRF), et
+seules les URI `ipp://` et `ipps://` sont acceptées.
 
 | Méthode | Route            | Description                                         |
 |---------|------------------|-----------------------------------------------------|
@@ -121,10 +125,11 @@ L'interface s'appuie sur une petite API JSON, utilisable aussi en script :
 
 ```bash
 curl -s http://localhost:5631/api/ipp \
-  -H 'Content-Type: application/json' \
+  -H 'X-IPP-Debug: 1' -H 'Content-Type: application/json' \
   -d '{"printer_uri":"ipp://192.0.2.10:631/ipp/print","operation":"get-printer-attributes"}'
 
 curl -s http://localhost:5631/api/print-job \
+  -H 'X-IPP-Debug: 1' \
   -F printer_uri=ipp://192.0.2.10:631/ipp/print \
   -F sides=two-sided-long-edge -F color_mode=monochrome \
   -F document=@document.pdf
@@ -137,12 +142,19 @@ curl -s http://localhost:5631/api/print-job \
 Cet outil est destiné au **débogage sur un réseau de confiance** :
 
 - il n'a **aucune authentification** ;
-- par défaut il écoute sur **toutes les interfaces** (`0.0.0.0`) ;
 - toute personne qui y accède peut envoyer des travaux, annuler ou purger des
   jobs, mettre en pause les imprimantes et scanner le sous-réseau.
 
-Sur un poste partagé ou un réseau ouvert, lancez-le avec
-`IPP_GUI_HOST=127.0.0.1`.
+Protections en place :
+
+- écoute sur `127.0.0.1` uniquement par défaut ;
+- en-tête `X-IPP-Debug` obligatoire sur `/api/*` : un site web tiers ouvert
+  dans votre navigateur ne peut pas piloter l'API (CSRF) ;
+- seules les URI `ipp://` / `ipps://` sont acceptées, ce qui empêche d'utiliser
+  le serveur comme relais HTTP générique.
+
+N'exposez l'interface sur le réseau (`IPP_GUI_HOST=0.0.0.0`) que sur un réseau
+de confiance.
 
 ---
 
